@@ -51,8 +51,10 @@ async function main(): Promise<number> {
   }
 
   const config = values.config ? await loadConfig(values.config) : {}
+  // The header carries the path exactly as it was passed in. Deriving it from cwd would make the output
+  // depend on where the command ran from, and --check would then fail in CI for no reason.
   const generated = generate(fs.readFileSync(schemaPath, 'utf8'), {
-    sourceName: path.relative(process.cwd(), schemaPath),
+    sourceName: values.schema,
     config,
   })
 

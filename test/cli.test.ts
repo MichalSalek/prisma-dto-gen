@@ -74,6 +74,18 @@ describe('cli', () => {
     assert.match(generated, /created_at: string$/m)
   })
 
+  it('puts the schema path in the header exactly as it was passed', async () => {
+    // Deriving it from cwd instead would change the output when the command runs from a subdirectory, and
+    // an absolute path would put someone's home directory into a committed file.
+    const relative = path.relative(workdir, schema)
+    const out = path.join(workdir, 'stable.ts')
+
+    await cliRun('--schema', relative, '--out', out)
+
+    const header = fs.readFileSync(out, 'utf8').split('\n')[0]
+    assert.equal(header, `// Generated from ${relative} by prisma-dto-gen. Do not edit by hand.`)
+  })
+
   it('fails on a missing schema', async () => {
     const result = await cliRun('--schema', path.join(workdir, 'nope.prisma'), '--out', path.join(workdir, 'x.ts'))
     assert.equal(result.code, 1)
