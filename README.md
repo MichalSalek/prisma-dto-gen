@@ -13,13 +13,15 @@ no longer matches the schema, which is how you find out that a migration landed 
 ## Install
 
 ```sh
-npm install --save-dev prisma-dto-gen
+npm install --save-dev @msalek/prisma-dto-gen
 ```
+
+The bin is `prisma-dto-gen`; the unscoped package name on npm belongs to someone else.
 
 ## Usage
 
 ```sh
-npx prisma-dto-gen --schema prisma/schema.prisma --out src/db.generated.ts
+npx @msalek/prisma-dto-gen --schema prisma/schema.prisma --out src/db.generated.ts
 ```
 
 For this schema:
@@ -161,7 +163,7 @@ union or function type is wrapped first: `string | number` on a list column beco
 ## API
 
 ```js
-import {generate} from 'prisma-dto-gen';
+import {generate} from '@msalek/prisma-dto-gen';
 
 const code = generate(schemaSource, {sourceName: 'schema.prisma', config});
 ```

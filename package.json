@@ -1,5 +1,5 @@
 {
-  "name": "prisma-dto-gen",
+  "name": "@msalek/prisma-dto-gen",
   "version": "0.1.0",
   "description": "Generate plain TypeScript types from a Prisma schema, with a --check mode for CI",
   "keywords": [
@@ -43,5 +43,8 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "typescript": "^5.9.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
