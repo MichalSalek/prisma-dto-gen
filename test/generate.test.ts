@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { EmptySchemaError, generate } from '../src/generate.ts'
+import { DuplicateNameError, EmptySchemaError, generate } from '../src/generate.ts'
 import type { GeneratorConfig } from '../src/config.ts'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -84,6 +84,41 @@ describe('generate', () => {
 
   it('refuses a schema with no models instead of emitting an empty file', () => {
     assert.throws(() => generate('enum Role {\n  ADMIN\n}\n', { sourceName: 'broken.prisma' }), EmptySchemaError)
+  })
+
+  it('does not read a field override off Object.prototype', () => {
+    const schema = 'model Thing {\n  id String @id\n  constructor String\n  toString String\n}\n'
+    const out = generate(schema, { config: { fieldTypes: { Thing: {} } } })
+
+    assert.match(out, /constructor: string$/m)
+    assert.match(out, /toString: string$/m)
+  })
+
+  it('wraps a union override before adding the array suffix', () => {
+    const out = run({ fieldTypes: { User: { labels: 'string | number' } } })
+    assert.match(out, /labels: \(string \| number\)\[\]$/m, 'string | number[] would be a different type')
+  })
+
+  it('wraps a function override before adding null', () => {
+    const out = run({ fieldTypes: { User: { nickname: '() => string' } } })
+    assert.match(out, /nickname: \(\(\) => string\) \| null$/m, 'null must not land on the return type')
+  })
+
+  it('leaves a plain union unwrapped when adding null', () => {
+    const out = run({ fieldTypes: { User: { nickname: "'a' | 'b'" } } })
+    assert.match(out, /nickname: 'a' \| 'b' \| null$/m)
+  })
+
+  it('maps an unsupported database type to unknown instead of an object', () => {
+    const schema = 'model Place {\n  id String @id\n  location Unsupported("point")?\n}\n'
+    const out = generate(schema)
+
+    assert.match(out, /location: unknown$/m)
+    assert.doesNotMatch(out, /\[object Object\]/)
+  })
+
+  it('refuses a rename that collides with an enum', () => {
+    assert.throws(() => run({ modelNames: { User: 'Role' } }), DuplicateNameError)
   })
 
   it('is stable: the same schema gives the same bytes', () => {

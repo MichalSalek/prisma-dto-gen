@@ -2,9 +2,10 @@
 
 > Generate plain TypeScript types from a Prisma schema
 
-Reads a `schema.prisma` and writes one file of exported types and enums. No Prisma client, no branded types,
-no runtime: the output is types you can import anywhere, including in a package that must not depend on
-`@prisma/client`.
+Reads a `schema.prisma` and writes one file of exported types and enums. No Prisma client and no branded
+types, so the output can be imported anywhere, including in a package that must not depend on
+`@prisma/client`. Enums come out as a frozen object next to the union type, so their values exist at runtime
+as well.
 
 It is meant to be committed and checked in CI. `--check` regenerates in memory and fails when the file on disk
 no longer matches the schema, which is how you find out that a migration landed and the types did not.
@@ -39,6 +40,13 @@ model User {
   created_at DateTime @default(now())
   posts      Post[]
 }
+
+model Post {
+  id        Int    @id @default(autoincrement())
+  title     String
+  author    User   @relation(fields: [author_id], references: [id])
+  author_id String
+}
 ```
 
 you get:
@@ -61,11 +69,16 @@ export type User = {
   labels: string[]
   created_at: Date
 }
+
+export type Post = {
+  id: number
+  title: string
+  author_id: string
+}
 ```
 
-An enum becomes a frozen object next to the union type, so the values exist at runtime as well. An optional
-column becomes `| null`, because that is what Prisma returns. A relation field is dropped and its foreign key
-scalar is kept, because the relation is not a column.
+An optional column becomes `| null`, because that is what Prisma returns. Both sides of the relation are
+dropped and the foreign key scalar is kept, because the relation is not a column.
 
 ## Options
 
@@ -141,7 +154,9 @@ export default {
 | `imports` | Type-only imports written at the top of the file |
 | `header` | Extra lines appended to the generated header comment |
 
-An override keeps the array suffix, so a `String[]` column mapped to `LabelName` becomes `LabelName[]`.
+An override keeps the array suffix, so a `String[]` column mapped to `LabelName` becomes `LabelName[]`, and a
+union or function type is wrapped first: `string | number` on a list column becomes `(string | number)[]`, not
+`string | number[]`.
 
 ## API
 
@@ -158,7 +173,11 @@ result over a committed file loses the types and reports success.
 ## Scope
 
 Columns and enums, nothing else. Relations, indexes, `@@map`, composite types and multi-file schemas are not
-handled. If you need the full picture, use the Prisma client types.
+handled, and a column declared `Unsupported(...)` becomes `unknown`. If you need the full picture, use the
+Prisma client types.
+
+Generation refuses rather than writing something broken: a schema that parses with no models at all, and a
+`modelNames` rename that collides with another declaration, both stop with an error.
 
 ## License
 

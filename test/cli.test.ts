@@ -86,6 +86,46 @@ describe('cli', () => {
     assert.equal(header, `// Generated from ${relative} by prisma-dto-gen. Do not edit by hand.`)
   })
 
+  it('refuses a config that is not an object', async () => {
+    const config = path.join(workdir, 'bad.json')
+    fs.writeFileSync(config, 'null', 'utf8')
+
+    const result = await cliRun('--schema', schema, '--out', path.join(workdir, 'x.ts'), '--config', config)
+
+    assert.equal(result.code, 1)
+    assert.match(result.stderr, /config must be an object/)
+  })
+
+  it('refuses a type map holding something other than a type name', async () => {
+    const config = path.join(workdir, 'typemap.json')
+    fs.writeFileSync(config, '{"typeMap":{"Int":42}}', 'utf8')
+    const out = path.join(workdir, 'typemap.ts')
+
+    const result = await cliRun('--schema', schema, '--out', out, '--config', config)
+
+    assert.equal(result.code, 1)
+    assert.match(result.stderr, /typeMap\.Int must be a string/)
+    assert.equal(fs.existsSync(out), false, 'a bad config must not produce a file')
+  })
+
+  it('refuses an import entry without a module', async () => {
+    const config = path.join(workdir, 'imports.json')
+    fs.writeFileSync(config, '{"imports":[{"types":["A"]}]}', 'utf8')
+
+    const result = await cliRun('--schema', schema, '--out', path.join(workdir, 'y.ts'), '--config', config)
+
+    assert.equal(result.code, 1)
+    assert.match(result.stderr, /imports\[0\]\.from must be a string/)
+  })
+
+  it('leaves no temporary file behind', async () => {
+    const out = path.join(workdir, 'clean.ts')
+    await cliRun('--schema', schema, '--out', out)
+
+    const strays = fs.readdirSync(workdir).filter((name) => name.includes('.tmp'))
+    assert.deepEqual(strays, [])
+  })
+
   it('fails on a missing schema', async () => {
     const result = await cliRun('--schema', path.join(workdir, 'nope.prisma'), '--out', path.join(workdir, 'x.ts'))
     assert.equal(result.code, 1)

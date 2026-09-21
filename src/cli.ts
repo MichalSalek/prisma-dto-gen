@@ -15,13 +15,78 @@ const USAGE = `Usage: prisma-dto-gen --schema <path> --out <path> [options]
   --help            Show this message
 `
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * A config is hand written, so a typo in it must fail loudly. Without this a JSON file holding `null` or a
+ * number where a type name belongs would generate default output, or types like `id: 42`, and exit 0.
+ */
+function checkConfig(value: unknown, file: string): GeneratorConfig {
+  const fail = (message: string): never => { throw new Error(`${file}: ${message}`) }
+  if (!isPlainObject(value)) return fail('config must be an object')
+
+  for (const key of ['typeMap', 'modelNames'] as const) {
+    const table = value[key]
+    if (table === undefined) continue
+    if (!isPlainObject(table)) fail(`${key} must be an object`)
+    for (const [name, mapped] of Object.entries(table as Record<string, unknown>)) {
+      if (typeof mapped !== 'string') fail(`${key}.${name} must be a string`)
+    }
+  }
+
+  if (value.fieldTypes !== undefined) {
+    if (!isPlainObject(value.fieldTypes)) fail('fieldTypes must be an object')
+    for (const [model, fields] of Object.entries(value.fieldTypes as Record<string, unknown>)) {
+      if (!isPlainObject(fields)) fail(`fieldTypes.${model} must be an object`)
+      for (const [field, mapped] of Object.entries(fields as Record<string, unknown>)) {
+        if (typeof mapped !== 'string') fail(`fieldTypes.${model}.${field} must be a string`)
+      }
+    }
+  }
+
+  for (const key of ['skipEnums', 'header'] as const) {
+    const list = value[key]
+    if (list === undefined) continue
+    if (!Array.isArray(list) || list.some((item) => typeof item !== 'string')) fail(`${key} must be an array of strings`)
+  }
+
+  if (value.imports !== undefined) {
+    if (!Array.isArray(value.imports)) fail('imports must be an array')
+    for (const [index, spec] of (value.imports as unknown[]).entries()) {
+      if (!isPlainObject(spec)) fail(`imports[${index}] must be an object`)
+      const { types, from } = spec as { types?: unknown; from?: unknown }
+      if (!Array.isArray(types) || types.length === 0 || types.some((t) => typeof t !== 'string')) {
+        fail(`imports[${index}].types must be a non-empty array of strings`)
+      }
+      if (typeof from !== 'string' || from.length === 0) fail(`imports[${index}].from must be a string`)
+    }
+  }
+
+  return value as GeneratorConfig
+}
+
 async function loadConfig(file: string): Promise<GeneratorConfig> {
   const resolved = path.resolve(file)
   if (!fs.existsSync(resolved)) throw new Error(`config not found: ${file}`)
-  if (resolved.endsWith('.json')) return JSON.parse(fs.readFileSync(resolved, 'utf8')) as GeneratorConfig
-  const module = (await import(pathToFileURL(resolved).href)) as { default?: GeneratorConfig }
-  if (!module.default) throw new Error(`config has no default export: ${file}`)
-  return module.default
+  if (resolved.endsWith('.json')) return checkConfig(JSON.parse(fs.readFileSync(resolved, 'utf8')), file)
+  const module = (await import(pathToFileURL(resolved).href)) as { default?: unknown }
+  if (module.default === undefined) throw new Error(`${file}: config has no default export`)
+  return checkConfig(module.default, file)
+}
+
+/** Written next to the target and renamed over it, so an interrupted run cannot leave a half written file. */
+function writeAtomic(target: string, contents: string): void {
+  const temporary = `${target}.${process.pid}.tmp`
+  fs.mkdirSync(path.dirname(target), { recursive: true })
+  try {
+    fs.writeFileSync(temporary, contents, 'utf8')
+    fs.renameSync(temporary, target)
+  } catch (error) {
+    fs.rmSync(temporary, { force: true })
+    throw error
+  }
 }
 
 async function main(): Promise<number> {
@@ -61,22 +126,16 @@ async function main(): Promise<number> {
   const outPath = path.resolve(values.out)
   const current = fs.existsSync(outPath) ? fs.readFileSync(outPath, 'utf8') : null
 
-  if (values.check) {
-    if (current === generated) {
-      process.stdout.write(`${values.out} is up to date\n`)
-      return 0
-    }
-    process.stderr.write(`${values.out} is stale, run prisma-dto-gen without --check\n`)
-    return 1
-  }
-
   if (current === generated) {
     process.stdout.write(`${values.out} is up to date\n`)
     return 0
   }
+  if (values.check) {
+    process.stderr.write(`${values.out} is stale, run prisma-dto-gen without --check\n`)
+    return 1
+  }
 
-  fs.mkdirSync(path.dirname(outPath), { recursive: true })
-  fs.writeFileSync(outPath, generated, 'utf8')
+  writeAtomic(outPath, generated)
   process.stdout.write(`${current === null ? 'created' : 'updated'} ${values.out}\n`)
   return 0
 }
