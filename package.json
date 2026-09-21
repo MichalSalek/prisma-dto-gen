@@ -1,0 +1,47 @@
+{
+  "name": "prisma-dto-gen",
+  "version": "0.1.0",
+  "description": "Generate plain TypeScript types from a Prisma schema, with a --check mode for CI",
+  "keywords": [
+    "prisma",
+    "typescript",
+    "codegen",
+    "dto",
+    "types"
+  ],
+  "license": "MIT",
+  "author": "Michal Salek <contact@michalsalek.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MichalSalek/prisma-dto-gen.git"
+  },
+  "type": "module",
+  "bin": {
+    "prisma-dto-gen": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "node --test \"test/*.test.ts\"",
+    "prepublishOnly": "npm run test && npm run build"
+  },
+  "dependencies": {
+    "@mrleebo/prisma-ast": "^0.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
